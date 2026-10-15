@@ -2,6 +2,7 @@
   "name": "Taller Transferencia de Archivos - Flask",
   "image": "mcr.microsoft.com/devcontainers/python:3.12",
   "postCreateCommand": "pip install -r server/requirements.txt && python server/create_sample_file.py",
+  "postStartCommand": "bash server/start.sh",
   "forwardPorts": [4000],
   "portsAttributes": {
     "4000": {
