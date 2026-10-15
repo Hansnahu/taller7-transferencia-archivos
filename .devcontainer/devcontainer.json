@@ -6,7 +6,8 @@
   "portsAttributes": {
     "4000": {
       "label": "Flask API",
-      "visibility": "public"
+      "visibility": "public",
+      "onAutoForward": "notify"
     }
   },
   "customizations": {
