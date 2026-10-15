@@ -2,11 +2,12 @@
 //  Taller Practico - Tema 7
 //  Transferencia de Archivos y Sincronizacion Asincrona
 //
-//  Funciona en DOS entornos:
-//   - Dispositivo (Expo Go / Android / iOS): usa expo-file-system,
-//     descarga a un archivo real y reanuda con HTTP Range.
-//   - Web (navegador / vista web de Snack): usa fetch + Range
-//     (expo-file-system NO existe en web).
+//  Reanudacion correcta:
+//   - Dispositivo (Expo Go): expo-file-system con pauseAsync()/resumeAsync()
+//   - Web (navegador): fetch + HTTP Range desde el byte recibido
+//
+//  IMPORTANTE: para reanudar hay que PAUSAR primero. Asi la reanudacion
+//  continua desde donde se quedo y NO vuelve a empezar de cero.
 // =============================================================
 
 import {
@@ -26,33 +27,34 @@ import * as FileSystem from 'expo-file-system/legacy'; // SDK 54+: la API clasic
 const FILE_URL =
   'https://obscure-parakeet-4jgx567xx6qf55xg-4000.app.github.dev/large-sample-file.zip';
 
+const TOTAL_MB = 20;
 const isWeb = Platform.OS === 'web';
 
-// -----------------------------------------------------------
-//  Estado en memoria para la version web (el navegador no tiene
-//  acceso al sistema de archivos nativo como el celular).
-// -----------------------------------------------------------
+// Estado en memoria para la version web (el navegador no escribe en disco).
 let webBytes = 0;
 let webAbortController = null;
 
 export default function App() {
-  const [progress, setProgress] = useState(0); // 0.0 a 1.0
+  const [progress, setProgress] = useState(0);      // 0.0 a 1.0
   const [status, setStatus] = useState('Inactivo');
   const [downloading, setDownloading] = useState(false);
+  const [downloadedMB, setDownloadedMB] = useState(0);
 
-  const downloadResumableRef = useRef(null); // objeto reanudable (nativo)
-  const downloadedBytesRef = useRef(0);      // bytes ya descargados (nativo)
+  const downloadResumableRef = useRef(null);        // objeto reanudable (nativo)
+  const downloadedBytesRef = useRef(0);             // bytes ya descargados antes de esta sesion
+  const pausedRef = useRef(false);                  // true si el usuario pauso
 
   const LOCAL_FILE_URI = isWeb
     ? ''
     : FileSystem.documentDirectory + 'downloaded-file.zip';
 
   // ---------------------------------------------------------
-  //  Actualiza progreso y estado a partir de bytes escritos
+  //  Actualiza progreso a partir de bytes escritos / total
   // ---------------------------------------------------------
-  const setProgressFrom = (written, total) => {
-    const p = total > 0 ? written / total : 0;
+  const updateProgress = (written, total) => {
+    const p = total > 0 ? Math.min(written / total, 1) : 0;
     setProgress(p);
+    setDownloadedMB(written / (1024 * 1024));
     setStatus(`Descargando stream: ${(p * 100).toFixed(1)}%`);
   };
 
@@ -60,11 +62,9 @@ export default function App() {
   //  NATIVO (Expo Go / Android / iOS)
   // =========================================================
   const nativeMakeProgressCallback = (alreadyDownloaded) => (downloadProgress) => {
-    const totalExpected =
-      downloadProgress.totalBytesExpectedToWrite + alreadyDownloaded;
-    const currentWritten =
-      downloadProgress.totalBytesWritten + alreadyDownloaded;
-    setProgressFrom(currentWritten, totalExpected);
+    const total = downloadProgress.totalBytesExpectedToWrite + alreadyDownloaded;
+    const written = downloadProgress.totalBytesWritten + alreadyDownloaded;
+    updateProgress(written, total);
   };
 
   const nativeStart = async (resume) => {
@@ -86,16 +86,6 @@ export default function App() {
     );
 
     await downloadResumableRef.current.downloadAsync();
-  };
-
-  const nativeResume = async () => {
-    if (downloadResumableRef.current) {
-      await downloadResumableRef.current.resumeAsync(
-        nativeMakeProgressCallback(downloadedBytesRef.current)
-      );
-    } else {
-      await nativeStart(true); // no hay objeto reanudable: reanuda desde el archivo
-    }
   };
 
   // =========================================================
@@ -125,12 +115,8 @@ export default function App() {
       if (done) break;
       received += value.length;
       webBytes = received;
-      setProgressFrom(received, total);
+      updateProgress(received, total);
     }
-  };
-
-  const webPause = () => {
-    if (webAbortController) webAbortController.abort();
   };
 
   // =========================================================
@@ -143,44 +129,69 @@ export default function App() {
     try {
       if (isWeb) {
         await webDownload(resume);
-      } else if (resume) {
-        await nativeResume();
+      } else if (resume && pausedRef.current && downloadResumableRef.current) {
+        // Continua EXACTAMENTE donde se pauso
+        await downloadResumableRef.current.resumeAsync(
+          nativeMakeProgressCallback(downloadedBytesRef.current)
+        );
       } else {
-        await nativeStart(false);
+        // Sin pausa previa: arranca (o reanuda desde el archivo en disco)
+        await nativeStart(resume);
       }
 
       setDownloading(false);
-      setStatus(
-        resume ? '¡Reanudación completada!' : '¡Descarga binaria finalizada con éxito!'
-      );
-      setProgress(1);
+      if (pausedRef.current) {
+        setStatus('Descarga pausada. Presiona "Reanudar Descarga".');
+      } else {
+        setStatus(
+          resume ? '¡Reanudación completada!' : '¡Descarga binaria finalizada con éxito!'
+        );
+        setProgress(1);
+        setDownloadedMB(TOTAL_MB);
+      }
     } catch (error) {
       setDownloading(false);
-      if (isWeb && error && error.name === 'AbortError') {
-        setStatus('Descarga pausada. Presiona "Reanudar" para continuar.');
+      if (pausedRef.current || (isWeb && error && error.name === 'AbortError')) {
+        setStatus('Descarga pausada. Presiona "Reanudar Descarga".');
       } else {
         setStatus(`Flujo interrumpido: ${error.message}`);
       }
     }
   };
 
-  const startDownload = () => runDownload(false);
+  const startDownload = () => {
+    pausedRef.current = false;
+    runDownload(false);
+  };
+
   const resumeDownload = () => runDownload(true);
 
+  const pauseDownload = async () => {
+    pausedRef.current = true;
+    if (isWeb) {
+      if (webAbortController) webAbortController.abort();
+    } else if (downloadResumableRef.current) {
+      try {
+        await downloadResumableRef.current.pauseAsync();
+      } catch (e) {
+        // ignorar
+      }
+    }
+  };
+
   // ---------------------------------------------------------
-  //  Verifica si el archivo ya existe (nativo) o su tamano (web)
+  //  Verifica el tamano descargado
   // ---------------------------------------------------------
   const checkFile = async () => {
     try {
       if (isWeb) {
-        const mb = webBytes / (1024 * 1024);
-        alert(`Archivo en memoria (web): ${mb.toFixed(2)} MB de 20.00 MB`);
+        alert(`Archivo en memoria (web): ${downloadedMB.toFixed(2)} MB de ${TOTAL_MB}.00 MB`);
         return;
       }
       let fileInfo = await FileSystem.getInfoAsync(LOCAL_FILE_URI);
       if (fileInfo.exists) {
         const sizeInMB = fileInfo.size / (1024 * 1024);
-        alert(`¡El archivo existe! ${sizeInMB.toFixed(2)} MB\n`);
+        alert(`¡El archivo existe! ${sizeInMB.toFixed(2)} MB`);
         console.log('Información del archivo:', fileInfo);
       } else {
         alert('El archivo todavía no ha sido descargado.');
@@ -196,9 +207,14 @@ export default function App() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Gestor de Descargas (Python Backend)</Text>
-      <Text style={styles.platform}>{isWeb ? 'Modo: Navegador (web)' : 'Modo: Dispositivo'}</Text>
+      <Text style={styles.platform}>
+        {isWeb ? 'Modo: Navegador (web)' : 'Modo: Dispositivo'}
+      </Text>
 
       <Text style={styles.status}>Estado: {status}</Text>
+      <Text style={styles.downloaded}>
+        Descargado: {downloadedMB.toFixed(2)} MB / {TOTAL_MB}.00 MB
+      </Text>
 
       {downloading && (
         <ActivityIndicator size="small" color="#4CAF50" style={styles.spinner} />
@@ -215,22 +231,20 @@ export default function App() {
       </TouchableOpacity>
 
       <TouchableOpacity
+        style={[styles.button, styles.pauseButton]}
+        onPress={pauseDownload}
+        disabled={!downloading}
+      >
+        <Text style={styles.buttonText}>Pausar Descarga</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
         style={[styles.button, styles.resumeButton]}
         onPress={resumeDownload}
         disabled={downloading}
       >
         <Text style={styles.buttonText}>Reanudar Descarga (Range)</Text>
       </TouchableOpacity>
-
-      {isWeb && (
-        <TouchableOpacity
-          style={[styles.button, styles.pauseButton]}
-          onPress={webPause}
-          disabled={!downloading}
-        >
-          <Text style={styles.buttonText}>Pausar (solo web)</Text>
-        </TouchableOpacity>
-      )}
 
       <TouchableOpacity
         style={[styles.button, styles.checkButton]}
@@ -252,21 +266,22 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 20, fontWeight: 'bold', marginBottom: 4, textAlign: 'center' },
   platform: { fontSize: 13, color: '#607D8B', marginBottom: 12 },
-  status: { fontSize: 15, marginBottom: 10, textAlign: 'center' },
-  spinner: { marginVertical: 10 },
-  progressText: { fontSize: 40, fontWeight: 'bold', color: '#4CAF50', marginVertical: 15 },
+  status: { fontSize: 15, marginBottom: 4, textAlign: 'center' },
+  downloaded: { fontSize: 13, color: '#455A64', marginBottom: 8 },
+  spinner: { marginVertical: 6 },
+  progressText: { fontSize: 40, fontWeight: 'bold', color: '#4CAF50', marginVertical: 12 },
   button: {
     backgroundColor: '#2196F3',
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 8,
-    marginTop: 12,
+    marginTop: 10,
     width: '100%',
     maxWidth: 320,
     alignItems: 'center',
   },
-  resumeButton: { backgroundColor: '#FF9800' },
   pauseButton: { backgroundColor: '#9C27B0' },
+  resumeButton: { backgroundColor: '#FF9800' },
   checkButton: { backgroundColor: '#607D8B' },
   buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
 });
