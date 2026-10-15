@@ -56,9 +56,15 @@ En la pestaña **Ports** de Codespaces:
 2. Clic derecho → **Port Visibility** → **Public**.
 3. Copia la URL generada (termina en `-4000.app.github.dev`).
 
+> **URL ya desplegada (Codespace `obscure-parakeet-4jgx567xx6qf55xg`, puerto 4000 público):**
+> `https://obscure-parakeet-4jgx567xx6qf55xg-4000.app.github.dev/large-sample-file.zip`
+>
+> En `app/App.js` la constante `FILE_URL` ya apunta ahí. Solo cámbiala si recreas el
+> Codespace (cada Codespace nuevo cambia el nombre y por lo tanto la URL).
+
 Para **tus** nombres reales de dominio, en `app/App.js` reemplaza la constante:
 ```js
-const FILE_URL = 'https://TU-CODESPACE-4000.app.github.dev/large-sample-file.zip';
+const FILE_URL = 'https://obscure-parakeet-4jgx567xx6qf55xg-4000.app.github.dev/large-sample-file.zip';
 ```
 
 ### 1.5 Cómo funciona la reanudación

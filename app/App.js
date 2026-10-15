@@ -15,7 +15,7 @@ import * as FileSystem from 'expo-file-system';
 //    y copia el enlace terminado en:  /large-sample-file.zip
 // -----------------------------------------------------------
 const FILE_URL =
-  'https://animated-fishstick-4000.app.github.dev/large-sample-file.zip';
+  'https://obscure-parakeet-4jgx567xx6qf55xg-4000.app.github.dev/large-sample-file.zip';
 
 export default function App() {
   const [progress, setProgress] = useState(0);          // 0.0 a 1.0
