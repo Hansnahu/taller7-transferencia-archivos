@@ -97,6 +97,22 @@ curl -I -H "Range: bytes=19922944-" http://localhost:4000/large-sample-file.zip
    - **Reanudar Descarga (Range)** → reanuda/continúa usando `Range`.
    - **Verificar Archivo en Celular** → comprueba si el ZIP existe y su tamaño.
 
+### ⚠️ Solución de problemas en Snack
+
+- **`Unable to resolve module 'module://expo-file-system.js'`** → falta la dependencia.
+  En Snack, en el panel izquierdo, abre **Dependencies** (o el `package.json`) y agrega
+  **`expo-file-system`**. Snack elige la versión correcta para tu SDK.
+- **La API clásica ya no existe (SDK 54+)**: desde el SDK 54, `createDownloadResumable`,
+  `getInfoAsync`, `documentDirectory`, etc. se movieron. Por eso el import es:
+  ```js
+  import * as FileSystem from 'expo-file-system/legacy';
+  ```
+  Si usas un SDK anterior al 54, cambia esa línea a:
+  ```js
+  import * as FileSystem from 'expo-file-system';
+  ```
+- Debe probarse en **Expo Go en un dispositivo real**, no en la vista web de Snack.
+
 ---
 
 ## 🔗 Relación con el código de la diapositiva

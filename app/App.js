@@ -6,7 +6,7 @@
 
 import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator } from 'react-native';
 import React, { useState, useRef } from 'react';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 
 // -----------------------------------------------------------
 //  CONFIGURACION
