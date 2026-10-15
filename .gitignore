@@ -1,0 +1,12 @@
+# Archivo grande de prueba (se genera con create_sample_file.py)
+server/large-sample-file.zip
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Expo / Node
+node_modules/
+.expo/
