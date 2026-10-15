@@ -1,8 +1,8 @@
-# =============================================================
-#  Taller Practico - Tema 7
-#  App Expo (Snack) que muestra el progreso de la transferencia
-#  y permite REANUDAR la descarga usando HTTP Range.
-# =============================================================
+// =============================================================
+//  Taller Practico - Tema 7
+//  App Expo (Snack) que muestra el progreso de la transferencia
+//  y permite REANUDAR la descarga usando HTTP Range.
+// =============================================================
 
 import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator } from 'react-native';
 import React, { useState, useRef } from 'react';
